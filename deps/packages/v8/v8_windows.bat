@@ -35,7 +35,7 @@ echo on
 rem Actual v8 configure and build steps - we build debug and release.
 cd v8
 rem Use double-quoting here because .bat quote removal is inscrutable.
-set V8_ARGS=target_cpu=""x64"" is_component_build=true v8_enable_backtrace=true v8_use_snapshot=true v8_use_external_startup_data=false v8_enable_i18n_support=true v8_test_isolation_mode=""noop""
+set V8_ARGS=target_cpu=""x64"" is_component_build=true v8_enable_backtrace=true v8_use_snapshot=true v8_use_external_startup_data=false v8_enable_i18n_support=false v8_test_isolation_mode=""noop""
 call gn gen out.gn/Release --args="%V8_ARGS% is_debug=false" || goto error
 echo on
 call ninja -C out.gn/Release || goto error
@@ -54,13 +54,13 @@ cd out.gn\release
 copy v8.dll* %INSTALL_DIR%\lib\Release || goto error
 copy v8_lib* %INSTALL_DIR%\lib\Release || goto error
 copy icu*.* %INSTALL_DIR%\lib\Release || goto error
-del %INSTALL_DIR%\lib\Debug\*.ilk || goto error
+del %INSTALL_DIR%\lib\Release\*.ilk || goto error
 
 cd ..\..\out.gn\debug
 copy v8.dll* %INSTALL_DIR%\lib\Debug || goto error
 copy v8_lib* %INSTALL_DIR%\lib\Debug || goto error
 copy icu*.* %INSTALL_DIR%\lib\Debug || goto error
-del %INSTALL_DIR%\lib\Release\*.ilk || goto error
+del %INSTALL_DIR%\lib\debug\*.ilk || goto error
 
 cd ..\..\include
 copy v8*.h %INSTALL_DIR%\include || goto error
