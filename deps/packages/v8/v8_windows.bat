@@ -27,7 +27,7 @@ rem of v8. Note: this is not truly vendored, as both depot_tools
 rem and the v8 build download many things from Google as part
 rem of the build. Therefore we can't guarantee this will work
 rem indefinitely. I could not find a way around this issue.
-echo solutions = [ { "url": "https://github.com/AnkitPrabhu/v8.git","managed": False, "name": "v8", "deps_file": "DEPS", "custom_deps": { "v8/third_party/icu": "https://chromium.googlesource.com/chromium/deps/icu.git@origin/chromium/59staging" }, }, ]; > .gclient
+echo solutions = [ { "url": "https://github.com/couchbasedeps/v8.git@5.9.223","managed": False, "name": "v8", "deps_file": "DEPS", "custom_deps": { "v8/third_party/icu": "https://chromium.googlesource.com/chromium/deps/icu.git@origin/chromium/59staging" }, }, ]; > .gclient
 call gclient sync --noprehooks --nohooks || goto error
 call gclient runhooks || goto error
 echo on
@@ -35,7 +35,7 @@ echo on
 rem Actual v8 configure and build steps - we build debug and release.
 cd v8
 rem Use double-quoting here because .bat quote removal is inscrutable.
-set V8_ARGS=target_cpu=""x64"" is_component_build=true v8_enable_backtrace=true v8_use_snapshot=true v8_use_external_startup_data=false v8_enable_i18n_support=true v8_test_isolation_mode=""noop""
+set V8_ARGS=target_cpu=""x64"" is_component_build=true v8_enable_backtrace=true v8_use_snapshot=true v8_use_external_startup_data=false v8_enable_i18n_support=true V8_I18N_SUPPORT=true v8_test_isolation_mode=""noop"" 
 call gn gen out.gn/Release --args="%V8_ARGS% is_debug=false" || goto error
 echo on
 call ninja -C out.gn/Release || goto error
