@@ -35,7 +35,7 @@ echo on
 rem Actual v8 configure and build steps - we build debug and release.
 cd v8
 rem Use double-quoting here because .bat quote removal is inscrutable.
-set V8_ARGS=target_cpu=""x64"" is_component_build=true v8_enable_backtrace=true v8_use_snapshot=true v8_use_external_startup_data=false v8_enable_i18n_support=false v8_test_isolation_mode=""noop""
+set V8_ARGS=target_cpu=""x64"" is_component_build=true v8_enable_backtrace=true v8_use_snapshot=true v8_use_external_startup_data=false v8_enable_i18n_support=false V8_I18N_SUPPORT=true v8_test_isolation_mode=""noop""
 call gn gen out.gn/Release --args="%V8_ARGS% is_debug=false" || goto error
 echo on
 call ninja -C out.gn/Release || goto error
