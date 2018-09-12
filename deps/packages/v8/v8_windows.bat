@@ -27,7 +27,7 @@ rem of v8. Note: this is not truly vendored, as both depot_tools
 rem and the v8 build download many things from Google as part
 rem of the build. Therefore we can't guarantee this will work
 rem indefinitely. I could not find a way around this issue.
-echo solutions = [ { "url": "https://github.com/couchbasedeps/v8.git@5.9.223","managed": False, "name": "v8", "deps_file": "DEPS", "custom_deps": { "v8/third_party/icu": "https://chromium.googlesource.com/chromium/deps/icu.git@origin/chromium/59staging" }, }, ]; > .gclient
+echo solutions = [ { "url": "https://github.com/AnkitPrabhu/v8.git@master","managed": False, "name": "v8", "deps_file": "DEPS", "custom_deps": { "v8/third_party/icu": "https://chromium.googlesource.com/chromium/deps/icu.git@origin/chromium/59staging" }, }, ]; > .gclient
 call gclient sync --noprehooks --nohooks || goto error
 call gclient runhooks || goto error
 echo on
