@@ -18,9 +18,13 @@ IF (CB_THREADSANITIZER)
     IF(HAVE_FLAG_SANITIZE_THREAD_C AND HAVE_FLAG_SANITIZE_THREAD_CXX)
         SET(THREAD_SANITIZER_FLAG "-fsanitize=thread")
 
+        SET(THREAD_SANITIZER_FLAG_DISABLE "-fno-sanitize=address")
+
         SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${THREAD_SANITIZER_FLAG}")
         SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${THREAD_SANITIZER_FLAG}")
         SET(CMAKE_CGO_LDFLAGS "${CMAKE_CGO_LDFLAGS} ${THREAD_SANITIZER_FLAG}")
+
+        use_runpath_for_sanitizers()
 
         # TC/jemalloc are incompatible with ThreadSanitizer - force
         # the use of the system allocator.
@@ -30,6 +34,27 @@ IF (CB_THREADSANITIZER)
         SET(MEMORYCHECK_TYPE ThreadSanitizer)
 
         ADD_DEFINITIONS(-DTHREAD_SANITIZER)
+
+        # Need to install libtsan to be able to run sanitized
+        # binaries on a machine different to the build machine
+        # (for example for RPM sanitized packages).
+        find_sanitizer_library(tsan_lib libtsan.so.0)
+        if (tsan_lib)
+            message(STATUS "Found libtsan at: ${tsan_lib}")
+            install(FILES ${tsan_lib} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+            if (IS_SYMLINK ${tsan_lib})
+                # Often a shared library is actually a symlink to a versioned file - e.g.
+                # libtsan.so.1 -> libtsan.so.1.0.0
+                # In which case we also need to install the real file.
+                get_filename_component(tsan_lib_realpath ${tsan_lib} REALPATH)
+                install(FILES ${tsan_lib_realpath} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+            endif ()
+        else ()
+            # Only raise error if building for linux
+            if (UNIX AND NOT APPLE)
+                message(FATAL_ERROR "TSan library not found.")
+            endif ()
+        endif ()
 
         # Override the normal ADD_TEST macro to set the TSAN_OPTIONS
         # environment variable - this allows us to specify the
@@ -41,8 +66,13 @@ IF (CB_THREADSANITIZER)
                SET(_name ${ARGV0})
             ENDIF()
             _ADD_TEST(${ARGV})
+
+            SET(tsan_options "suppressions=${CMAKE_SOURCE_DIR}/tlm/tsan.suppressions second_deadlock_stack=1 history_size=7")
+            # On some platforms (at least macOS Mojave), mutex deadlocking is
+            # not enabled by default.
+            SET(tsan_options "${tsan_options} detect_deadlocks=1")
             SET_TESTS_PROPERTIES(${_name} PROPERTIES ENVIRONMENT
-                                 "TSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/tlm/tsan.suppressions second_deadlock_stack=1 history_size=7")
+                                 "TSAN_OPTIONS=${tsan_options}")
         ENDFUNCTION()
 
         MESSAGE(STATUS "ThreadSanitizer enabled - forcing use of 'system' memory allocator.")

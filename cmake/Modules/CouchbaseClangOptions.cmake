@@ -77,6 +77,22 @@ list(APPEND _cb_cxx_flags
      -Werror=redundant-decls
      -Werror=missing-braces
      -ftemplate-depth=900)
+
+# Required from clang 3.9 if sized deletion is desired and still required in at
+# least version 7.0.1 (current latest release version).
+check_cxx_compiler_flag(-fsized-deallocation HAVE_SIZED_DEALLOCATION)
+if (HAVE_SIZED_DEALLOCATION)
+    list (APPEND _cb_cxx_flags -fsized-deallocation)
+endif()
+
+# https://bugs.llvm.org/show_bug.cgi?id=31815: Clang issues spurious
+# Wunused-lambda-capture warnings. Disable this warning until the fix is
+# picked up in the versions of clang we use.
+check_cxx_compiler_flag(-Wno-unused-lambda-capture HAVE_NO_UNUSED_LAMBDA_CAPTURE)
+if (HAVE_NO_UNUSED_LAMBDA_CAPTURE)
+  list(APPEND _cb_cxx_flags -Wno-unused-lambda-capture)
+endif()
+
 # Convert the list to a string
 string(REPLACE ";" " " _cb_cxx_options "${_cb_cxx_flags}")
 
@@ -88,11 +104,19 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -DNDEBUG -g")
 # Make use of -Og (optimize for debugging) if available (Clang 4.0 upwards)
 check_cxx_compiler_flag(-Og HAVE_OPTIMIZE_FOR_DEBUG)
 if (HAVE_OPTIMIZE_FOR_DEBUG)
-    set(CMAKE_CXX_FLAGS_DEBUG "-Og -g")
+    set(CB_CXX_FLAGS_OPTIMIZE_FOR_DEBUG -Og)
 else ()
-    set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
+    set(CB_CXX_FLAGS_OPTIMIZE_FOR_DEBUG -O0)
 endif ()
+set(CMAKE_CXX_FLAGS_DEBUG "${CB_CXX_FLAGS_OPTIMIZE_FOR_DEBUG} -g")
 set(CB_CXX_FLAGS_NO_OPTIMIZE -O0)
 
 set(CB_GNU_CXX11_OPTION "-std=gnu++11")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_cb_cxx_options}")
+
+if (DEFINED COUCHBASE_DISABLE_DEBUG_OPTIMIZATION)
+    set(CMAKE_C_FLAGS_DEBUG "-g")
+    set(CMAKE_CXX_FLAGS_DEBUG "-g")
+    set(CB_CXX_FLAGS_NO_OPTIMIZE "")
+    set(CB_CXX_FLAGS_OPTIMIZE_FOR_DEBUG "")
+endif()

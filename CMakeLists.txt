@@ -1,7 +1,7 @@
 #
 # This is the toplevel CMakeLists.txt that is used to build Couchbase
 #
-CMAKE_MINIMUM_REQUIRED(VERSION 3.2)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.12)
 
 STRING(REGEX REPLACE "[ ]" "a" modified_source_dir "${CMAKE_SOURCE_DIR}")
 IF (NOT modified_source_dir STREQUAL CMAKE_SOURCE_DIR)
@@ -13,6 +13,9 @@ IF (NOT modified_binary_dir STREQUAL CMAKE_BINARY_DIR)
   MESSAGE(FATAL_ERROR "Couchbase cannot be built in a build directory containing a space character")
 ENDIF (NOT modified_binary_dir STREQUAL CMAKE_BINARY_DIR)
 
+if ($ENV{COUCHBASE_DISABLE_DEBUG_OPTIMIZATION})
+   SET(COUCHBASE_DISABLE_DEBUG_OPTIMIZATION True CACHE BOOL "Disable optimization for Debug target")
+endif ($ENV{COUCHBASE_DISABLE_DEBUG_OPTIMIZATION})
 
 # The PROJECT() macro sets it's own default build type, so need to specify
 # ours first.
@@ -21,6 +24,13 @@ IF (NOT DEFINED CMAKE_BUILD_TYPE)
        "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel."
        FORCE)
 ENDIF ()
+
+#
+# Choose deployment target on macOS.
+# As of Mad-Hatter, minimum supported is High Sierra (10.13).
+#
+SET(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING
+    "Minimum supported version of MacOS X")
 
 PROJECT("Couchbase")
 
@@ -40,7 +50,7 @@ OPTION(COUCHBASE_KV_COMMIT_VALIDATION
 # customer environment.
 OPTION(CB_DEVELOPMENT_ASSERTS
        "Enable additional asserts which abort execution if they fail."
-       OFF)
+       ON)
 IF (CB_DEVELOPMENT_ASSERTS)
    MESSAGE(STATUS "Enabling CB_DEVELOPMENT_ASSERTS")
    ADD_DEFINITIONS(-DCB_DEVELOPMENT_ASSERTS)
@@ -96,8 +106,14 @@ OPTION (CB_DEVELOPER_BUILD "Produce Developer builds" ON)
 # 'Production builds' are those built by the official Couchbase build jobs
 OPTION (CB_PRODUCTION_BUILD "Official production build" OFF)
 
-# Temporary option to enable building eventing before it is fully phased into vulcan
-OPTION (CB_ENABLE_EVENTING "Enable eventing features" ON)
+# Option to build JsEvaluator
+OPTION(CB_ENABLE_JSEVALUATOR "Enable JsEvaluator" OFF)
+
+# Add option to build tools only
+SET(BUILD_ONLY_TOOLS False)
+IF ($ENV{CB_TOOLS_ONLY})
+  SET(BUILD_ONLY_TOOLS True)
+ENDIF ($ENV{CB_TOOLS_ONLY})
 
 MESSAGE(STATUS "Using cmake version: ${CMAKE_VERSION}")
 MESSAGE(STATUS "Installing to ${CMAKE_INSTALL_PREFIX}")
@@ -110,6 +126,7 @@ INCLUDE(CouchbaseMemoryAllocator)
 INCLUDE(CouchbaseCompression)
 
 INCLUDE(FindCouchbaseBoost)
+INCLUDE(FindCouchbaseFolly)
 INCLUDE(FindCouchbaseOpenSSL)
 INCLUDE(FindCouchbaseLibevent)
 INCLUDE(FindCouchbaseCurl)
@@ -121,10 +138,12 @@ INCLUDE(FindCouchbaseDtrace)
 INCLUDE(FindCouchbaseGo)
 INCLUDE(FindCouchbaseBreakpad)
 INCLUDE(FindCouchbaseFlatbuffers)
+INCLUDE(FindCouchbasePCRE)
 INCLUDE(FindCouchbaseValgrind)
 INCLUDE(FindCouchbaseV8)
 INCLUDE(FindCouchbaseNlohmannJson)
 INCLUDE(FindCouchbaseRocksDB)
+INCLUDE(FindCouchbaseOpentracing)
 
 if (BUILD_ENTERPRISE)
     # libuv is currently only used by the enterpise builds
@@ -177,8 +196,10 @@ ENDIF(WORDS_BIG_ENDIAN)
 
 ENABLE_TESTING()
 
-INCLUDE_DIRECTORIES(BEFORE ${CMAKE_BINARY_DIR}/platform/include)
-INCLUDE_DIRECTORIES(AFTER ${NLOHMANN_JSON_INCLUDE_DIR})
+IF (NOT BUILD_ONLY_TOOLS)
+  INCLUDE_DIRECTORIES(BEFORE ${CMAKE_BINARY_DIR}/platform/include)
+  INCLUDE_DIRECTORIES(AFTER ${NLOHMANN_JSON_INCLUDE_DIR})
+ENDIF()
 
 # Add a quick (and safe) way to nuke everything
 ADD_CUSTOM_TARGET(reset
@@ -191,7 +212,11 @@ ADD_SUBDIRECTORY(googletest EXCLUDE_FROM_ALL)
 
 ADD_SUBDIRECTORY(benchmark EXCLUDE_FROM_ALL)
 
-ADD_SUBDIRECTORY(phosphor)
+IF (NOT BUILD_ONLY_TOOLS)
+  ADD_SUBDIRECTORY(tlm/python)
+  ADD_SUBDIRECTORY(phosphor)
+ENDIF()
+
 OPTION(PHOSPHOR_DISABLE "Disable compilation of Phosphor trace points into components" OFF)
 
 IF (PHOSPHOR_DISABLE)
@@ -201,62 +226,75 @@ ENDIF (PHOSPHOR_DISABLE)
 
 ADD_SUBDIRECTORY(third_party EXCLUDE_FROM_ALL)
 
-ADD_SUBDIRECTORY(platform)
-ADD_SUBDIRECTORY(subjson)
-ADD_SUBDIRECTORY(kv_engine/include)
-ADD_SUBDIRECTORY(couchstore)
+IF (NOT BUILD_ONLY_TOOLS)
+  ADD_SUBDIRECTORY(platform)
+  ADD_SUBDIRECTORY(subjson)
+  ADD_SUBDIRECTORY(kv_engine/include)
+  ADD_SUBDIRECTORY(couchstore)
+  IF (BUILD_ENTERPRISE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/magma")
+    ADD_SUBDIRECTORY(magma)
+  ENDIF()
+ENDIF()
+
 IF (NOT COUCHBASE_KV_COMMIT_VALIDATION)
     ADD_SUBDIRECTORY(forestdb)
     SET (FORESTDB_INCLUDE_DIR "${ForestDB_SOURCE_DIR}/include")
     SET(FORESTDB_LIBRARY_DIR "${ForestDB_BINARY_DIR}")
     SET (FORESTDB_TARGET forestdb)
 ENDIF()
-ADD_SUBDIRECTORY(kv_engine)
-ADD_SUBDIRECTORY(sigar)
-if (EXISTS "${PROJECT_SOURCE_DIR}/moxi")
-   ADD_SUBDIRECTORY(moxi)
-endif()
-ADD_SUBDIRECTORY(product-texts/couchbase-server)
+
+IF (NOT BUILD_ONLY_TOOLS)
+  ADD_SUBDIRECTORY(kv_engine)
+  ADD_SUBDIRECTORY(sigar)
+ENDIF()
+
+IF (NOT BUILD_ONLY_TOOLS)
+  ADD_SUBDIRECTORY(product-texts/couchbase-server)
+ENDIF()
 
 IF (NOT COUCHBASE_KV_COMMIT_VALIDATION)
-    ADD_SUBDIRECTORY(couchbase-cli)
-    ADD_SUBDIRECTORY(couchdb)
-    ADD_SUBDIRECTORY(geocouch)
-    ADD_SUBDIRECTORY(query-ui)
+    IF (NOT BUILD_ONLY_TOOLS)
+      ADD_SUBDIRECTORY(couchbase-cli)
+      ADD_SUBDIRECTORY(couchdb)
+      ADD_SUBDIRECTORY(geocouch)
+      ADD_SUBDIRECTORY(query-ui)
+    ENDIF()
 
     SET (GODEPSDIR "${CMAKE_CURRENT_SOURCE_DIR}/godeps")
+    IF (NOT BUILD_ONLY_TOOLS)
+      ADD_SUBDIRECTORY(ns_server ${CMAKE_CURRENT_SOURCE_DIR}/ns_server/build)
 
-    ADD_SUBDIRECTORY(ns_server ${CMAKE_CURRENT_SOURCE_DIR}/ns_server/build)
+      ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/query)
+      ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/indexing)
+      ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/goxdcr)
+      ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/gometa)
+      ADD_SUBDIRECTORY(godeps/src/github.com/couchbase/cbauth)
 
-    ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/query)
-    ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/indexing)
-    ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/goxdcr)
-    ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/gometa)
-    ADD_SUBDIRECTORY(godeps/src/github.com/couchbase/cbauth)
+      ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/cbft)
+      ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/docloader)
+      ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/mobile-service)
 
-    ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/cbft)
-    ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/docloader)
+      # Analytics CBGT connector
+      IF (BUILD_ENTERPRISE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/goproj/src/github.com/couchbase/cbas")
+        ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/cbas)
+      ENDIF ()
 
-    # Analytics CBGT connector
-    IF (BUILD_ENTERPRISE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/goproj/src/github.com/couchbaselabs/cbas")
-      ADD_SUBDIRECTORY(goproj/src/github.com/couchbaselabs/cbas)
-    ENDIF ()
+      # Analytics Maven project
+      IF (BUILD_ENTERPRISE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/analytics/CMakeLists.txt")
+        ADD_SUBDIRECTORY (analytics)
+      ENDIF ()
 
-    # Analytics Maven project
-    IF (BUILD_ENTERPRISE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/analytics/CMakeLists.txt")
-      ADD_SUBDIRECTORY (analytics)
-    ENDIF ()
-
-    # Analytics UI
-    IF (BUILD_ENTERPRISE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbas-ui")
-      ADD_SUBDIRECTORY (cbas-ui)
-    ENDIF ()
+      # Analytics UI
+      IF (BUILD_ENTERPRISE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbas-ui")
+        ADD_SUBDIRECTORY (cbas-ui)
+      ENDIF ()
+    ENDIF()
 
     IF (BUILD_ENTERPRISE AND EXISTS "${PROJECT_SOURCE_DIR}/goproj/src/github.com/couchbase/backup")
       ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/backup)
     ENDIF()
 
-    IF (BUILD_ENTERPRISE AND EXISTS "${PROJECT_SOURCE_DIR}/goproj/src/github.com/couchbase/plasma")
+    IF (BUILD_ENTERPRISE AND EXISTS "${PROJECT_SOURCE_DIR}/goproj/src/github.com/couchbase/plasma" AND NOT BUILD_ONLY_TOOLS)
       ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/plasma)
     ENDIF()
 
@@ -266,20 +304,29 @@ IF (NOT COUCHBASE_KV_COMMIT_VALIDATION)
       SET (LCB_BUILD_DTRACE OFF CACHE BOOL "Turn off tracing" FORCE)
       SET (LCB_INSTALL_HEADERS OFF CACHE BOOL "Don't install headers" FORCE)
       SET (LCB_INSTALL_PKGCONFIG OFF CACHE BOOL "Don't install libcouchbase.pc" FORCE)
+      SET (CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "Override libdir to violate FHS" FORCE)
       ADD_SUBDIRECTORY(libcouchbase)
     ENDIF()
 
-    IF (BUILD_ENTERPRISE AND CB_ENABLE_EVENTING)
-      ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/eventing)
-    ENDIF()
+    IF (NOT BUILD_ONLY_TOOLS)
+      IF (BUILD_ENTERPRISE)
+        ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/eventing)
+      ENDIF()
 
-    IF (BUILD_ENTERPRISE AND EXISTS "${PROJECT_SOURCE_DIR}/goproj/src/github.com/couchbase/cbsummary")
-      ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/cbsummary)
-    ENDIF()
+      IF (BUILD_ENTERPRISE AND CB_ENABLE_JSEVALUATOR)
+        ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/eventing-ee)
+      ENDIF()
 
+      IF (BUILD_ENTERPRISE AND EXISTS "${PROJECT_SOURCE_DIR}/goproj/src/github.com/couchbase/cbsummary")
+        ADD_SUBDIRECTORY(goproj/src/github.com/couchbase/cbsummary)
+      ENDIF()
+    ENDIF ()
+
+    IF (EXISTS "${PROJECT_SOURCE_DIR}/voltron/CMakeLists.txt")
+      ADD_SUBDIRECTORY(voltron)
+    ENDIF ()
 ENDIF (NOT COUCHBASE_KV_COMMIT_VALIDATION)
 
 IF (NOT WIN32)
    CONFIGURE_FILE(tlm/memcached-wrapper.in ${CMAKE_BINARY_DIR}/tlm/memcached-wrapper)
-   CONFIGURE_FILE(tlm/moxi-wrapper.in ${CMAKE_BINARY_DIR}/tlm/moxi-wrapper)
 ENDIF (NOT WIN32)

@@ -50,6 +50,8 @@ IF (CB_UNDEFINEDSANITIZER GREATER 0)
         # default (all symbols visible).
         SET(UNDEFINED_SANITIZER_FLAG "${UNDEFINED_SANITIZER_FLAG} -fvisibility=default")
 
+        SET(UNDEFINED_SANITIZER_FLAG_DISABLE "-fno-sanitize=undefined -fvisibility=hidden")
+
         # Configure CTest's MemCheck mode.
         SET(MEMORYCHECK_TYPE UndefinedBehaviorSanitizer)
 
@@ -61,6 +63,27 @@ IF (CB_UNDEFINEDSANITIZER GREATER 0)
             SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${UNDEFINED_SANITIZER_FLAG} -fno-omit-frame-pointer")
             SET(CMAKE_CGO_LDFLAGS "${CMAKE_CGO_LDFLAGS} ${UNDEFINED_SANITIZER_FLAG}")
 	    ADD_DEFINITIONS(-DUNDEFINED_SANITIZER)
+
+            # Need to install libuban to be able to run sanitized
+            # binaries on a machine different to the build machine
+            # (for example for RPM sanitized packages).
+            find_sanitizer_library(ubsan_lib libubsan.so.0)
+            if (ubsan_lib)
+                message(STATUS "Found libubsan at: ${ubsan_lib}")
+                install(FILES ${ubsan_lib} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+                if (IS_SYMLINK ${ubsan_lib})
+                    # Often a shared library is actually a symlink to a versioned file - e.g.
+                    # libubsan.so.1 -> libubsan.so.1.0.0
+                    # In which case we also need to install the real file.
+                    get_filename_component(ubsan_lib_realpath ${ubsan_lib} REALPATH)
+                    install(FILES ${ubsan_lib_realpath} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+                endif ()
+            else ()
+                # Only raise error if building for linux
+                if (UNIX AND NOT APPLE)
+                    message(FATAL_ERROR "UBSan library not found.")
+                endif ()
+            endif ()
 	endif()
 
         MESSAGE(STATUS "UndefinedBehaviorSanitizer enabled (mode ${CB_UNDEFINEDSANITIZER})")
@@ -81,4 +104,18 @@ function(add_sanitize_undefined TARGET)
         PROPERTY COMPILE_FLAGS " ${UNDEFINED_SANITIZER_FLAG} -fno-omit-frame-pointer")
     set_property(TARGET ${TARGET} APPEND_STRING
         PROPERTY LINK_FLAGS " ${UNDEFINED_SANITIZER_FLAG}")
+endfunction()
+
+# Disable UBSAN for specific target. No-op if
+# CB_UNDEFINEDSANITIZER is not enabled.
+# Typically used via remove_sanitizers()
+function(remove_sanitize_undefined TARGET)
+    if (NOT CB_UNDEFINEDSANITIZER)
+        return()
+    endif ()
+
+    set_property(TARGET ${TARGET} APPEND_STRING
+        PROPERTY COMPILE_FLAGS " ${UNDEFINED_SANITIZER_FLAG_DISABLE}")
+    set_property(TARGET ${TARGET} APPEND_STRING
+        PROPERTY LINK_FLAGS " ${UNDEFINED_SANITIZER_FLAG_DISABLE}")
 endfunction()

@@ -154,40 +154,30 @@ ADD_CUSTOM_TARGET(build-and-cache-all)
 #
 # And here is the set of "latest" dependencies.
 #
-IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows")
-   _ADD_DEP_PACKAGE(breakpad 20160926 20160926-couchbase 2)
-ELSE (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows")
-   MESSAGE(STATUS "Skipping breakpad for ${CMAKE_SYSTEM_NAME}")
-ENDIF (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows")
-_ADD_DEP_PACKAGE(snappy 1.1.6 1.1.6 1)
+# Note: Snappy 1.1.1-cb6 was used for Alice only;
+# next master build (if needed) should be -cb7
+_ADD_DEP_PACKAGE(snappy 1.1.1 1.1.1 5)
 _ADD_DEP_PACKAGE(python-snappy c97d633 c97d633 2)
-_ADD_DEP_PACKAGE(icu4c 59.1 r59.1 1)
-_ADD_DEP_PACKAGE(libevent 2.1.8 release-2.1.8-stable-cb 4)
-_ADD_DEP_PACKAGE(v8 5.9 5.9.223 5)
-# jemalloc comes from "stable-4" branch, which is a bit later than their
-# 4.5.0 release, so we call it 4.5.0.1.
-_ADD_DEP_PACKAGE(jemalloc 4.5.0.1 stable-4 1)
-_ADD_DEP_PACKAGE(curl 7.60.0 curl-7_60_0 1)
+_ADD_DEP_PACKAGE(icu4c 59.1 r59.1 4)
+_ADD_DEP_PACKAGE(libevent 2.1.8 release-2.1.8-stable-cb 10)
+_ADD_DEP_PACKAGE(v8 7.1 7.1.321 5)
+_ADD_DEP_PACKAGE(jemalloc 5.1.0 5.1.0-couchbase 6)
 
-_ADD_DEP_PACKAGE(erlang OTP-20.3.2 OTP-20.3.2 5)
+_ADD_DEP_PACKAGE(erlang OTP-20.3.8.11 couchbase-madhatter 7)
 
 _ADD_DEP_PACKAGE(libsqlite3 3.7.2 3.7.2 1)
 
-IF (PLATFORM STREQUAL "fedora26" OR PLATFORM STREQUAL "fedora27")
-  _ADD_DEP_PACKAGE(flatbuffers 1.7.1 v1.7.1 1)
-ELSE ()
-  _ADD_DEP_PACKAGE(flatbuffers 1.4.0 v1.4.0 1)
-ENDIF ()
+_ADD_DEP_PACKAGE(flatbuffers 1.10.0 v1.10.0 4)
 
-_ADD_DEP_PACKAGE(json 3.1.2 v3.1.2 1)
-_ADD_DEP_PACKAGE(boost 1.62.0 v1.62.0 3)
-IF (WIN32 OR APPLE)
-  # Note: we build libevent with support for SSL, so whenever
-  # OpenSSL is upgraded with an API breaking change we probably
-  # need to rebuild libevent as well.
-  _ADD_DEP_PACKAGE(openssl 1.0.2k OpenSSL_1_0_2k 2)
-ENDIF (WIN32 OR APPLE)
-_ADD_DEP_PACKAGE(libcouchbase 2.8.4 2.8.4 1)
+_ADD_DEP_PACKAGE(json 3.5.0 v3.5.0 2)
+_ADD_DEP_PACKAGE(boost 1.67.0 boost-1.67.0 6)
+
+# Note: we build libevent with support for SSL, so whenever
+# OpenSSL is upgraded with an API breaking change we probably
+# need to rebuild libevent and erlang as well.
+_ADD_DEP_PACKAGE(openssl 1.1.1b OpenSSL_1_1_1b 4)
+
+_ADD_DEP_PACKAGE(libcouchbase 2.10.0 2.10.0 1)
 IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
   IF (PLATFORM STREQUAL "fedora26" OR PLATFORM STREQUAL "fedora27")
     _ADD_DEP_PACKAGE(libcxx 4.0.0 release_40 1)
@@ -195,20 +185,27 @@ IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     _ADD_DEP_PACKAGE(libcxx 3.9.1 release_39 2)
   ENDIF ()
 ENDIF ()
-_ADD_DEP_PACKAGE(libuv 1.20.3 v1.20.3 1)
 IF (WIN32)
   _ADD_DEP_PACKAGE(flex 2.5.4a master 1)
 ELSE ()
-  _ADD_DEP_PACKAGE(flex 2.6.4 master 4)
+  _ADD_DEP_PACKAGE(flex 2.6.4 master 6)
 ENDIF ()
-_ADD_DEP_PACKAGE(zlib 1.2.11 v1.2.11 3)
-_ADD_DEP_PACKAGE(numactl 2.0.11 v2.0.11 1)
+_ADD_DEP_PACKAGE(numactl 2.0.11 v2.0.11 3)
 
 IF (NOT WIN32)
-    _ADD_DEP_PACKAGE(rocksdb 5.14.2 v5.14.2 1)
+    _ADD_DEP_PACKAGE(rocksdb 5.18.3 5.18.3-couchbase 4)
 ENDIF ()
-_ADD_DEP_PACKAGE(lz4 1.8.0 v1.8.0 2)
+_ADD_DEP_PACKAGE(lz4 1.8.0 v1.8.0 4)
 # maven 3.5.2-cb3 and 3.5.2-cb4 exist as attempts to make Windows work,
 # but are not correct.
-_ADD_DEP_PACKAGE(maven 3.5.2 master 5)
-_ADD_DEP_PACKAGE(openjdk-rt 1.8.0.171 UNUSED 1)
+_ADD_DEP_PACKAGE(maven 3.5.2 master 6)
+_ADD_DEP_PACKAGE(openjdk-rt 1.8.0.171 UNUSED 2)
+
+_ADD_DEP_PACKAGE(double-conversion 3.0.0 v3.0.0 4)
+_ADD_DEP_PACKAGE(gflags 2.2.1 v2.2.1 4)
+_ADD_DEP_PACKAGE(glog 0.3.5 v0.3.5 3)
+
+_ADD_DEP_PACKAGE(folly v2019.04.01.00 v2019.04.01.00-couchbase 3)
+_ADD_DEP_PACKAGE(grpc 1.12.0 v1.12.0 6)
+_ADD_DEP_PACKAGE(pcre 8.42 v8.42 5)
+_ADD_DEP_PACKAGE(opentracing-cpp v1.5.1 v1.5.1 4)

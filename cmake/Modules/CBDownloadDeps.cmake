@@ -11,7 +11,8 @@ IF (NOT CBDownloadDeps_INCLUDED)
       MESSAGE (FATAL_ERROR "Missing .md5 file ${md5file}!")
     ENDIF (NOT EXISTS "${md5file}")
     FILE (MD5 "${file}" _actual_md5)
-    FILE (STRINGS "${md5file}" _expected_md5)
+    FILE (READ "${md5file}" _expected_md5_output LIMIT 32)
+    STRING (SUBSTRING "${_expected_md5_output}" 0 32 _expected_md5)
     IF (_actual_md5 STREQUAL _expected_md5)
       SET (${retval} 1)
     ELSE (_actual_md5 STREQUAL _expected_md5)
@@ -109,9 +110,14 @@ IF (NOT CBDownloadDeps_INCLUDED)
   # Downloads a dependency to the cache dir. First checks the cache for
   # an up-to-date copy based on md5.  Sets the variable named by 'var'
   # to the downloaded dependency .tgz.
-  FUNCTION (_DOWNLOAD_DEP name version var)
-    _GET_DEP_FILENAME("${name}" "${version}" _rel_path)
-    SET (_repo_url "${CB_DOWNLOAD_DEPS_REPO}/${name}/${version}/${_rel_path}")
+  FUNCTION (_DOWNLOAD_DEP name v2 version build var)
+    IF (v2)
+      _GET_DEP_FILENAME("${name}" "${version}-${build}" _rel_path)
+      SET (_repo_url "${CB_DOWNLOAD_DEPS_REPO}/${name}/${version}/${build}/${_rel_path}")
+    ELSE (v2)
+      _GET_DEP_FILENAME("${name}" "${version}" _rel_path)
+      SET (_repo_url "${CB_DOWNLOAD_DEPS_REPO}/${name}/${version}/${_rel_path}")
+    ENDIF (v2)
     _DOWNLOAD_URL_TO_CACHE ("${_repo_url}" _cachefile)
     SET (${var} "${_cachefile}" PARENT_SCOPE)
   ENDFUNCTION (_DOWNLOAD_DEP)
@@ -134,7 +140,7 @@ IF (NOT CBDownloadDeps_INCLUDED)
 
   # Declare a dependency
   FUNCTION (DECLARE_DEP name)
-    PARSE_ARGUMENTS (dep "PLATFORMS" "VERSION" "SKIP;NOINSTALL" ${ARGN})
+    PARSE_ARGUMENTS (dep "PLATFORMS" "VERSION;BUILD" "V2;SKIP;NOINSTALL" ${ARGN})
 
     # If this dependency has already been declared, skip it.
     # Exception: if we are building the cbdeps packages themselves then
@@ -146,6 +152,15 @@ IF (NOT CBDownloadDeps_INCLUDED)
       MESSAGE (STATUS "Dependency ${name} already declared, skipping...")
       RETURN ()
     ENDIF (_declared AND NOT "${PROJECT_NAME}" STREQUAL "cbdeps_packages")
+
+    # Set a variable to use for the version based on whether
+    # the V2 argument is set or not (for V2, version and build
+    # values are separate)
+    IF (dep_V2)
+      SET (_dep_fullver "${dep_VERSION}-${dep_BUILD}")
+    ELSE (dep_V2)
+      SET (_dep_fullver "${dep_VERSION}")
+    ENDIF (dep_V2)
 
     # If this dependency declares PLATFORM, ensure that we are running on
     # one of those platforms.
@@ -162,7 +177,7 @@ IF (NOT CBDownloadDeps_INCLUDED)
       ENDFOREACH (_platform)
       IF (NOT _found_platform AND NOT _supported_platform)
         # check if we maybe have locally built dep file
-        _GET_DEP_FILENAME("${name}" "${dep_VERSION}" _dep_filename)
+        _GET_DEP_FILENAME("${name}" "${_dep_fullver}" _dep_filename)
         SET(_dep_path "${CB_DOWNLOAD_DEPS_CACHE}/${_dep_filename}")
         SET(_dep_md5path "${CB_DOWNLOAD_DEPS_CACHE}/${_dep_filename}.md5")
 
@@ -175,7 +190,7 @@ IF (NOT CBDownloadDeps_INCLUDED)
         ENDIF ()
       ENDIF (NOT _found_platform AND NOT _supported_platform)
       IF (NOT _found_platform)
-        MESSAGE (STATUS "Dependency ${name} (${dep_VERSION}) not declared for platform "
+        MESSAGE (STATUS "Dependency ${name} (${_dep_fullver}) not declared for platform "
           "${_this_platform}, skipping...")
         RETURN ()
       ENDIF ()
@@ -205,24 +220,24 @@ IF (NOT CBDownloadDeps_INCLUDED)
       SET (EXPLODED_VERSION "<none>")
     ENDIF (EXISTS "${_explode_dir}/VERSION.txt")
 
-    MESSAGE (STATUS "Checking exploded ${name} version ${EXPLODED_VERSION} against ${dep_VERSION}")
-    IF (EXPLODED_VERSION STREQUAL ${dep_VERSION})
-      MESSAGE (STATUS "Dependency '${name} (${dep_VERSION})' already downloaded")
-    ELSE (EXPLODED_VERSION STREQUAL ${dep_VERSION})
-      _DOWNLOAD_DEP (${name} ${dep_VERSION} _cachedep)
+    MESSAGE (STATUS "Checking exploded ${name} version ${EXPLODED_VERSION} against ${_dep_fullver}")
+    IF (EXPLODED_VERSION STREQUAL ${_dep_fullver})
+      MESSAGE (STATUS "Dependency '${name} (${_dep_fullver})' already downloaded")
+    ELSE (EXPLODED_VERSION STREQUAL ${_dep_fullver})
+      _DOWNLOAD_DEP ("${name}" "${dep_V2}" "${dep_VERSION}" "${dep_BUILD}" _cachedep)
 
       # Explode tgz into build directory.
-      MESSAGE (STATUS "Installing dependency: ${name}-${dep_VERSION}...")
+      MESSAGE (STATUS "Installing dependency: ${name}-${_dep_fullver}...")
       EXPLODE_ARCHIVE ("${_cachedep}" "${_explode_dir}")
-      FILE (WRITE "${_explode_dir}/VERSION.txt" ${dep_VERSION})
-    ENDIF (EXPLODED_VERSION STREQUAL ${dep_VERSION})
+      FILE (WRITE "${_explode_dir}/VERSION.txt" ${_dep_fullver})
+    ENDIF (EXPLODED_VERSION STREQUAL ${_dep_fullver})
 
     # Always add the dep subdir; this will "re-install" the dep every time you
     # run CMake, which might be wasteful, but at least should be safe.
     FILE (MAKE_DIRECTORY "${_binary_dir}")
     IF (EXISTS ${_explode_dir}/CMakeLists.txt)
       IF (dep_NOINSTALL)
-	MESSAGE(STATUS "Skip running CMakeLists from the package")
+        MESSAGE(STATUS "Skip running CMakeLists from the package")
       ELSE (dep_NOINSTALL)
         ADD_SUBDIRECTORY ("${_explode_dir}" "${_binary_dir}" EXCLUDE_FROM_ALL)
       ENDIF (dep_NOINSTALL)
@@ -290,6 +305,61 @@ IF (NOT CBDownloadDeps_INCLUDED)
     ENDIF ()
   ENDFUNCTION (GET_GO_VERSION)
 
+  # Start of CBDeps 2.0 - download and cache the new 'cbdep' tool
+  SET (CBDEP_VERSION 0.9.3)
+  FUNCTION (GET_CBDEP)
+    _DETERMINE_PLATFORM (_platform)
+    STRING (SUBSTRING "${_platform}" 0 6 _platform_head)
+    IF (_platform STREQUAL "macosx")
+      SET (_cbdepfile "cbdep-${CBDEP_VERSION}-darwin")
+    ELSEIF (_platform_head STREQUAL "window")
+      SET (_cbdepfile "cbdep-${CBDEP_VERSION}-windows.exe")
+    ELSE ()
+      # Presumed Linux
+      SET (_cbdepfile "cbdep-${CBDEP_VERSION}-linux")
+    ENDIF ()
+    SET (CBDEP_CACHE "${CB_DOWNLOAD_DEPS_CACHE}/cbdep/${CBDEP_VERSION}/${_cbdepfile}"
+      CACHE INTERNAL "Path to cbdep cached download")
+    SET (CBDEP "${PROJECT_BINARY_DIR}/tlm/${_cbdepfile}"
+      CACHE INTERNAL "Path to cbdep executable")
+    IF (NOT EXISTS "${CBDEP_CACHE}")
+      MESSAGE (STATUS "Downloading cbdep ${CBDEP_VERSION}")
+      _DOWNLOAD_FILE (
+        "http://packages.couchbase.com/cbdep/${CBDEP_VERSION}/${_cbdepfile}"
+        "${CBDEP_CACHE}")
+    ENDIF ()
+    FILE (COPY "${CBDEP_CACHE}" DESTINATION "${PROJECT_BINARY_DIR}/tlm"
+      FILE_PERMISSIONS OWNER_EXECUTE OWNER_READ OWNER_WRITE)
+    MESSAGE (STATUS "Using cbdep at ${CBDEP}")
+  ENDFUNCTION (GET_CBDEP)
+
+  # Generic function for installing a cbdep (2.0) package to a given directory
+  # Required arguments:
+  #   PACKAGE - package to install
+  #   VERSION - version number of package (must be understood by 'cbdep' tool)
+  # Optional arguments:
+  #   INSTALL_DIR - where to install to; defaults to CMAKE_CURRENT_BINARY_DIR
+  MACRO (CBDEP_INSTALL)
+    PARSE_ARGUMENTS (cbdep "" "INSTALL_DIR;PACKAGE;VERSION" "" ${ARGN})
+
+    IF (NOT cbdep_INSTALL_DIR)
+      SET (cbdep_INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    ENDIF ()
+    MESSAGE (STATUS "Downloading and caching ${cbdep_PACKAGE}-${cbdep_VERSION}")
+    EXECUTE_PROCESS (
+      COMMAND "${CBDEP}" install
+        -d "${cbdep_INSTALL_DIR}"
+        ${cbdep_PACKAGE} ${cbdep_VERSION}
+      RESULT_VARIABLE _cbdep_result
+      OUTPUT_VARIABLE _cbdep_out
+      ERROR_VARIABLE _cbdep_out
+    )
+    IF (_cbdep_result)
+      FILE (REMOVE_RECURSE "${cbdep_INSTALL_DIR}")
+      MESSAGE (FATAL_ERROR "Failed installing cbdep ${cbdep_PACKAGE} ${cbdep_VERSION}: ${_cbdep_out}")
+    ENDIF ()
+  ENDMACRO (CBDEP_INSTALL)
+
   CB_GET_SUPPORTED_PLATFORM (_supported_platform)
   IF (_supported_platform)
     SET (CB_DOWNLOAD_DEPS_REPO
@@ -320,4 +390,5 @@ IF (NOT CBDownloadDeps_INCLUDED)
   MESSAGE (STATUS "Third-party dependencies will be cached in "
     "${CB_DOWNLOAD_DEPS_CACHE}")
 
+  GET_CBDEP ()
 ENDIF (NOT CBDownloadDeps_INCLUDED)

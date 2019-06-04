@@ -42,6 +42,8 @@ IF (CB_ADDRESSSANITIZER)
 
         SET(ADDRESS_SANITIZER_FLAG "-fsanitize=address")
 
+        SET(ADDRESS_SANITIZER_FLAG_DISABLE "-fno-sanitize=address")
+
         # TC/jemalloc cause issues with AddressSanitizer - force
         # the use of the system allocator.
         SET(COUCHBASE_MEMORY_ALLOCATOR system CACHE STRING "Memory allocator to use")
@@ -71,8 +73,31 @@ IF (CB_ADDRESSSANITIZER)
             SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDRESS_SANITIZER_FLAG} -fno-omit-frame-pointer")
             SET(CMAKE_CGO_LDFLAGS "${CMAKE_CGO_LDFLAGS} ${ADDRESS_SANITIZER_FLAG}")
 
+            use_runpath_for_sanitizers()
+
             ADD_DEFINITIONS(-DADDRESS_SANITIZER)
-        endif()
+
+            # Need to install libubsan to be able to run sanitized
+            # binaries on a machine different to the build machine
+            # (for example for RPM sanitized packages).
+            find_sanitizer_library(asan_lib libasan.so.4)
+            if (asan_lib)
+                message(STATUS "Found libasan at: ${asan_lib}")
+                install(FILES ${asan_lib} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+                if (IS_SYMLINK ${asan_lib})
+                    # Often a shared library is actually a symlink to a versioned file - e.g.
+                    # libasan.so.4 -> libasan.so.4.0.0
+                    # In which case we also need to install the real file.
+                    get_filename_component(asan_lib_realpath ${asan_lib} REALPATH)
+                    install(FILES ${asan_lib_realpath} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+                endif ()
+            else ()
+                # Only raise error if building for linux
+                if (UNIX AND NOT APPLE)
+                    message(FATAL_ERROR "ASan library not found.")
+                endif ()
+            endif ()
+        endif ()
 
         MESSAGE(STATUS "AddressSanitizer enabled (mode ${CB_ADDRESSSANITIZER})")
     ELSE()
@@ -92,4 +117,18 @@ function(add_sanitize_memory TARGET)
         PROPERTY COMPILE_FLAGS " ${ADDRESS_SANITIZER_FLAG} -fno-omit-frame-pointer")
     set_property(TARGET ${TARGET} APPEND_STRING
         PROPERTY LINK_FLAGS " ${ADDRESS_SANITIZER_FLAG}")
+endfunction()
+
+# Disable AddressSanitizer for specific target. No-op if
+# CB_ADDRESSSANITIZER is not enabled.
+# Typically used via remove_sanitizers()
+function(remove_sanitize_memory TARGET)
+    if (NOT CB_ADDRESSSANITIZER)
+        return()
+    endif ()
+
+    set_property(TARGET ${TARGET} APPEND_STRING
+        PROPERTY COMPILE_FLAGS "${ADDRESS_SANITIZER_FLAG_DISABLE}")
+    set_property(TARGET ${TARGET} APPEND_STRING
+        PROPERTY LINK_FLAGS " ${ADDRESS_SANITIZER_FLAG_DISABLE}")
 endfunction()
