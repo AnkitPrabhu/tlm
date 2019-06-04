@@ -55,6 +55,7 @@ mkdir -p \
     cp -avi libv8*.* $INSTALL_DIR/lib/Release
     cp -avi libicu*.* $INSTALL_DIR/lib/Release
     cp -avi icu*.* $INSTALL_DIR/lib/Release
+    cp -avi icu*.* $INSTALL_DIR/bin/Release
     if [[ $PLATFORM != "macosx" ]]; then
         cp -avi libc++*.* $INSTALL_DIR/lib/Release
     fi
@@ -64,6 +65,7 @@ mkdir -p \
     cp -avi libv8*.* $INSTALL_DIR/lib/Debug
     cp -avi libicu*.* $INSTALL_DIR/lib/Debug
     cp -avi icu*.* $INSTALL_DIR/lib/Debug
+    cp -avi icu*.* $INSTALL_DIR/bin/Release
     if [[ $PLATFORM != "macosx" ]]; then
         cp -avi libc++*.* $INSTALL_DIR/lib/Debug
     fi

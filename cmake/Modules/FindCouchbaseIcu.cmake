@@ -20,30 +20,20 @@
 #  ICU_INCLUDE_DIR, where to find the ICU headers
 
 if (NOT DEFINED ICU_FOUND)
-    include(PlatformIntrospection)
-
-    cb_get_supported_platform(_supported_platform)
-    if (_supported_platform)
-        # Supported platforms should only use the provided hints and pick it up
-        # from cbdeps
-        set(_icu_no_default_path NO_DEFAULT_PATH)
+    # CBD-2634: We use ICU from V8 build as most uses of ICU is with V8
+    if (NOT DEFINED V8_FOUND)
+        include(FindCouchbaseV8)
     endif ()
 
-    set(_icu_exploded ${CMAKE_BINARY_DIR}/tlm/deps/icu4c.exploded)
-
     find_path(ICU_INCLUDE_DIR unicode/utypes.h
-              HINTS ${_icu_exploded}
-              PATH_SUFFIXES include
+              HINTS ${V8_INCLUDE_DIR}
               NO_CMAKE_PATH
               NO_CMAKE_ENVIRONMENT_PATH
-              ${_icu_no_default_path})
+              NO_DEFAULT_PATH)
 
     if (NOT ICU_INCLUDE_DIR)
         message(FATAL_ERROR "Failed to locate unicode/utypes.h (ICU)")
     endif ()
-
-    string(STRIP ${ICU_INCLUDE_DIR} ICU_INCLUDE_DIR)
-    string(STRIP "${ICU_LIB_HINT_DIR}" ICU_LIB_HINT_DIR)
 
     if (NOT ICU_LIBRARIES)
         set(_icu_libraries "icuuc;icudata;icui18n;icucdt;icuin")
@@ -51,10 +41,8 @@ if (NOT DEFINED ICU_FOUND)
             unset(_the_lib CACHE)
             find_library(_the_lib
                          NAMES ${_mylib}
-                         HINTS
-                         ${ICU_LIB_HINT_DIR}
-                         ${CMAKE_INSTALL_PREFIX}/lib
-                         ${_icu_no_default_path})
+                         HINTS ${CMAKE_INSTALL_PREFIX}/lib
+                         NO_DEFAULT_PATH)
             if (_the_lib)
                 list(APPEND _icu_libs_found ${_the_lib})
             endif (_the_lib)
@@ -65,7 +53,7 @@ if (NOT DEFINED ICU_FOUND)
     if (NOT ICU_LIBRARIES)
         message(FATAL_ERROR "Failed to locate any of the ICU libraries")
     endif ()
-
+    FILE (COPY ${CMAKE_INSTALL_PREFIX}/lib/icudtl.dat DESTINATION "${CMAKE_INSTALL_PREFIX}/bin/icudtl.dat")
     message(STATUS "Found ICU headers in: ${ICU_INCLUDE_DIR}")
     message(STATUS "           libraries: ${ICU_LIBRARIES}")
 
